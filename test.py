@@ -7,6 +7,12 @@ import os
 import tempfile
 import unittest
 
+def surroundWithPomXmlDeclarationAndProject(xml):
+    return """<?xml version="1.0"?>
+        <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+        """ + xml + """
+        </project>"""
+
 class GetFileReadTest(unittest.TestCase):
     def setUp(self):
         self.tempFile = tempfile.NamedTemporaryFile()
@@ -40,25 +46,20 @@ class ExtractDependenciesTest(unittest.TestCase):
         self.assertEmptyResponse(" ")
 
     def testNoDependenciesPom(self):
-        pom = """<?xml version="1.0"?>
-            <project>
-            </project>"""
+        pom = surroundWithPomXmlDeclarationAndProject("")
         self.assertEmptyResponse(pom)
 
     def testNoDependencyElementsPom(self):
-        pom = """<?xml version="1.0"?>
-            <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+        pom = surroundWithPomXmlDeclarationAndProject("""
                 <dependencies>
-                </dependencies>
-            </project>"""
+                </dependencies>""")
         self.assertEmptyResponse(pom)
 
     def assertEmptyResponse(self, param):
         self.assertEqual([], ctagmvn.extractDependencies(param))
 
     def testHappyPath(self):
-        pom = """<?xml version="1.0"?>
-            <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+        pom = surroundWithPomXmlDeclarationAndProject("""
                 <dependencies>
                     <dependency>
                         <groupId>org.springframework</groupId>
@@ -66,13 +67,12 @@ class ExtractDependenciesTest(unittest.TestCase):
                         <version>3.1.4.RELEASE</version>
                     </dependency>
                 </dependencies>
-            </project>"""
+            """)
         expected = ["org.springframework:spring-core:3.1.4.RELEASE"]
         self.assertEqual(expected, ctagmvn.extractDependencies(pom))
 
     def testExtractWithMavenPropertyPlaceholders(self):
-        pom = """<?xml version="1.0"?>
-            <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+        pom = surroundWithPomXmlDeclarationAndProject("""
                 <properties>
                     <spring.version>3.1.4.RELEASE</spring.version>
                 </properties>
@@ -83,7 +83,7 @@ class ExtractDependenciesTest(unittest.TestCase):
                         <version>${spring.version}</version>
                     </dependency>
                 </dependencies>
-            </project>"""
+            """)
         expected = ["org.springframework:spring-core:3.1.4.RELEASE"]
         self.assertEqual(expected, ctagmvn.extractDependencies(pom))
 
@@ -110,20 +110,17 @@ class JarDependenciesTest(unittest.TestCase):
 
 class ExtractPropertiesTest(unittest.TestCase):
     def testHappyPath(self):
-        pom = """<?xml version="1.0"?>
-            <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+        pom = surroundWithPomXmlDeclarationAndProject("""
                 <properties>
                     <spring.version>3.1.4.RELEASE</spring.version>
                 </properties>
-            </project>"""
+            """)
         project = etree.fromstring(pom)
         properties = ctagmvn.extractProperties(project)
         self.assertEqual("3.1.4.RELEASE", properties["spring.version"])
 
     def testNoPropertiesElement(self):
-        pom = """<?xml version="1.0"?>
-            <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-            </project>"""
+        pom = surroundWithPomXmlDeclarationAndProject("")
         project = etree.fromstring(pom)
         properties = ctagmvn.extractProperties(project)
         self.assertEqual(0, len(properties))
@@ -148,4 +145,4 @@ class ReplaceWithPropertiesTest(unittest.TestCase):
         self.assertEqual(expected, actual)
 
 if __name__ == '__main__':
-    unittest.main(verbosity=2)
+    unittest.main()
