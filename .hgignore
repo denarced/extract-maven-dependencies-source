@@ -1,0 +1,4 @@
+syntax: glob
+
+*.swp     # Vim swap files
+*.pyc
