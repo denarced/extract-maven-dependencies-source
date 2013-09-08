@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-from lxml import etree
 import ctagmvn
 import filesystem
 import os
@@ -36,58 +35,6 @@ class GetFileExistenceTest(unittest.TestCase):
         assert not os.path.exists(filepath)
         self.assertRaises(ctagmvn.FileNotFoundError, ctagmvn.getFile, filepath)
 
-class ExtractDependenciesTest(unittest.TestCase):
-    def testNoneInputParameter(self):
-        self.assertEmptyResponse(None)
-
-    def testEmptyInputParameter(self):
-        self.assertEmptyResponse("")
-
-    def testEffectivelyEmptyInputParameter(self):
-        self.assertEmptyResponse(" ")
-
-    def testNoDependenciesPom(self):
-        pomContent = surroundWithPomXmlDeclarationAndProject("")
-        self.assertEmptyResponse(pomContent)
-
-    def testNoDependencyElementsPom(self):
-        pomContent = surroundWithPomXmlDeclarationAndProject("""
-                <dependencies>
-                </dependencies>""")
-        self.assertEmptyResponse(pomContent)
-
-    def assertEmptyResponse(self, param):
-        self.assertEqual([], ctagmvn.extractDependencies(param))
-
-    def testHappyPath(self):
-        pomContent = surroundWithPomXmlDeclarationAndProject("""
-                <dependencies>
-                    <dependency>
-                        <groupId>org.springframework</groupId>
-                        <artifactId>spring-core</artifactId>
-                        <version>3.1.4.RELEASE</version>
-                    </dependency>
-                </dependencies>
-            """)
-        expected = ["org.springframework:spring-core:3.1.4.RELEASE"]
-        self.assertEqual(expected, ctagmvn.extractDependencies(pomContent))
-
-    def testExtractWithMavenPropertyPlaceholders(self):
-        pomContent = surroundWithPomXmlDeclarationAndProject("""
-                <properties>
-                    <spring.version>3.1.4.RELEASE</spring.version>
-                </properties>
-                <dependencies>
-                    <dependency>
-                        <groupId>org.springframework</groupId>
-                        <artifactId>spring-core</artifactId>
-                        <version>${spring.version}</version>
-                    </dependency>
-                </dependencies>
-            """)
-        expected = ["org.springframework:spring-core:3.1.4.RELEASE"]
-        self.assertEqual(expected, ctagmvn.extractDependencies(pomContent))
-
 class JarDependenciesTest(unittest.TestCase):
     def setUp(self):
         self.jarDependencies = ctagmvn.JarDependencies()
@@ -108,42 +55,6 @@ class JarDependenciesTest(unittest.TestCase):
         self.assertEqual(
             expected, 
             self.jarDependencies.deriveSourcePaths(dependencies, None))
-
-class ExtractPropertiesTest(unittest.TestCase):
-    def testHappyPath(self):
-        pomContent = surroundWithPomXmlDeclarationAndProject("""
-                <properties>
-                    <spring.version>3.1.4.RELEASE</spring.version>
-                </properties>
-            """)
-        project = etree.fromstring(pomContent)
-        properties = ctagmvn.extractProperties(project)
-        self.assertEqual("3.1.4.RELEASE", properties["spring.version"])
-
-    def testNoPropertiesElement(self):
-        pomContent = surroundWithPomXmlDeclarationAndProject("")
-        project = etree.fromstring(pomContent)
-        properties = ctagmvn.extractProperties(project)
-        self.assertEqual(0, len(properties))
-
-class ReplaceWithPropertiesTest(unittest.TestCase):
-    def testSimpleReplace(self):
-        p = "spring.version"
-        v = "3.1.4.RELEASE"
-        self.verify("${" + p + "}", v, {p: v})
-
-    def testReplaceWithNonReplacedPrefix(self):
-        p = "tomcat.port"
-        v = "411"
-        self.verify("10${" + p + "}", "10" + v, {p: v})
-
-    def testReplaceWithNonExistentProperty(self):
-        godlike = "${godlike}"
-        self.verify(godlike, godlike, {})
-
-    def verify(self, text, expected, properties):
-        actual = ctagmvn.replaceWithProperties(text, properties)
-        self.assertEqual(expected, actual)
 
 class DependencyListTest(unittest.TestCase):
     def testHappyPath(self):

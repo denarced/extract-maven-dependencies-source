@@ -1,11 +1,9 @@
 #!/usr/bin/env python
 
-from lxml import etree
 import argparse
 import filesystem
 import os
 import pom
-import re
 import shutil
 import threading
 import zipfile
@@ -33,41 +31,6 @@ def getFile(filename):
         contents += line.strip()
     return contents
 
-def extractElement(parent, tag):
-    for el in parent:
-        if removeNamespace(el.tag) == tag:
-            return el
-    return None
-
-def removeNamespace(s):
-    return re.sub("""{[^}]*}""", "", s)
-
-def extractProperties(project):
-    """ Extract dict of maven properties.
-
-    Parameters:
-    project     lxml.etree element of maven xml project element.
-
-    """
-    properties = extractElement(project, "properties")
-    pomHasNoProperties = properties is None
-    propertyDict = {}
-    if pomHasNoProperties:
-        return propertyDict
-    for p in properties:
-        propertyDict[removeNamespace(p.tag)] = p.text
-    return propertyDict
-
-def replaceWithProperties(text, properties):
-    """ Replace maven ${property} placeholder with real value from properties dict. """
-    p = "\$\{([^}]+)}"
-    m = re.search(p, text)
-    if m:
-        name = m.group(1)
-        if name in properties:
-            return re.sub(p, properties[name], text)
-    return text
-
 def fetchDependencies(pomPath):
     dependencyList = pom.DependencyList(pomPath)
     sourceFetch = pom.SourceFetch(pomPath)
@@ -80,43 +43,6 @@ def fetchDependencies(pomPath):
     for each in running:
         each.join()
     return dependencyList.getList()
-
-def extractDependencies(pomXml):
-    """ Extract dependency info.
-
-    Parameters:
-    pomXml    xml string of the maven pom file.
-
-    Return list of dependencies in form groupId:artifactId:version.
-
-    """
-    if pomXml == None:
-        return []
-    try:
-        project = etree.fromstring(pomXml)
-    except etree.XMLSyntaxError:
-        return []
-    if project == None:
-        return []
-    properties = extractProperties(project)
-    dependencies = extractElement(project, "dependencies")
-    if dependencies == None:
-        return []
-    dependencyList = []
-    for each in dependencies:
-        if removeNamespace(each.tag) != "dependency":
-            continue
-        groupId = replaceWithProperties(
-            extractElement(each, "groupId").text, 
-            properties)
-        artifactId = replaceWithProperties(
-            extractElement(each, "artifactId").text, 
-            properties)
-        version = replaceWithProperties(
-            extractElement(each, "version").text,
-            properties)
-        dependencyList.append(":".join([groupId, artifactId, version]))
-    return dependencyList
 
 def fullJarDirectoryPath(repository, dependency):
     """ Return full path to the dependency directory.
