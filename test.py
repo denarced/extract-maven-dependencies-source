@@ -4,6 +4,7 @@ from lxml import etree
 import ctagmvn
 import filesystem
 import os
+import pom
 import tempfile
 import unittest
 
@@ -46,20 +47,20 @@ class ExtractDependenciesTest(unittest.TestCase):
         self.assertEmptyResponse(" ")
 
     def testNoDependenciesPom(self):
-        pom = surroundWithPomXmlDeclarationAndProject("")
-        self.assertEmptyResponse(pom)
+        pomContent = surroundWithPomXmlDeclarationAndProject("")
+        self.assertEmptyResponse(pomContent)
 
     def testNoDependencyElementsPom(self):
-        pom = surroundWithPomXmlDeclarationAndProject("""
+        pomContent = surroundWithPomXmlDeclarationAndProject("""
                 <dependencies>
                 </dependencies>""")
-        self.assertEmptyResponse(pom)
+        self.assertEmptyResponse(pomContent)
 
     def assertEmptyResponse(self, param):
         self.assertEqual([], ctagmvn.extractDependencies(param))
 
     def testHappyPath(self):
-        pom = surroundWithPomXmlDeclarationAndProject("""
+        pomContent = surroundWithPomXmlDeclarationAndProject("""
                 <dependencies>
                     <dependency>
                         <groupId>org.springframework</groupId>
@@ -69,10 +70,10 @@ class ExtractDependenciesTest(unittest.TestCase):
                 </dependencies>
             """)
         expected = ["org.springframework:spring-core:3.1.4.RELEASE"]
-        self.assertEqual(expected, ctagmvn.extractDependencies(pom))
+        self.assertEqual(expected, ctagmvn.extractDependencies(pomContent))
 
     def testExtractWithMavenPropertyPlaceholders(self):
-        pom = surroundWithPomXmlDeclarationAndProject("""
+        pomContent = surroundWithPomXmlDeclarationAndProject("""
                 <properties>
                     <spring.version>3.1.4.RELEASE</spring.version>
                 </properties>
@@ -85,7 +86,7 @@ class ExtractDependenciesTest(unittest.TestCase):
                 </dependencies>
             """)
         expected = ["org.springframework:spring-core:3.1.4.RELEASE"]
-        self.assertEqual(expected, ctagmvn.extractDependencies(pom))
+        self.assertEqual(expected, ctagmvn.extractDependencies(pomContent))
 
 class JarDependenciesTest(unittest.TestCase):
     def setUp(self):
@@ -110,18 +111,18 @@ class JarDependenciesTest(unittest.TestCase):
 
 class ExtractPropertiesTest(unittest.TestCase):
     def testHappyPath(self):
-        pom = surroundWithPomXmlDeclarationAndProject("""
+        pomContent = surroundWithPomXmlDeclarationAndProject("""
                 <properties>
                     <spring.version>3.1.4.RELEASE</spring.version>
                 </properties>
             """)
-        project = etree.fromstring(pom)
+        project = etree.fromstring(pomContent)
         properties = ctagmvn.extractProperties(project)
         self.assertEqual("3.1.4.RELEASE", properties["spring.version"])
 
     def testNoPropertiesElement(self):
-        pom = surroundWithPomXmlDeclarationAndProject("")
-        project = etree.fromstring(pom)
+        pomContent = surroundWithPomXmlDeclarationAndProject("")
+        project = etree.fromstring(pomContent)
         properties = ctagmvn.extractProperties(project)
         self.assertEqual(0, len(properties))
 
@@ -143,6 +144,28 @@ class ReplaceWithPropertiesTest(unittest.TestCase):
     def verify(self, text, expected, properties):
         actual = ctagmvn.replaceWithProperties(text, properties)
         self.assertEqual(expected, actual)
+
+class DependencyListTest(unittest.TestCase):
+    def testHappyPath(self):
+        pomContent = surroundWithPomXmlDeclarationAndProject("""
+            <groupId>com.denarced</groupId>
+            <artifactId>tester</artifactId>
+            <version>0.0.1</version>
+            <modelVersion>4.0.0</modelVersion>
+            <dependencies>
+                <dependency>
+                    <groupId>org.springframework</groupId>
+                    <artifactId>spring-webmvc</artifactId>
+                    <version>3.1.4.RELEASE</version>
+                </dependency>
+            </dependencies>""")
+        f = tempfile.NamedTemporaryFile()
+        f.write(pomContent)
+        f.flush()
+        depList = pom.DependencyList(f.name)
+        depList.run()
+        f.close()
+        self.assertTrue(len(depList.getList()) > 0)
 
 if __name__ == '__main__':
     unittest.main()

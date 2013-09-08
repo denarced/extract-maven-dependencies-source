@@ -4,11 +4,13 @@ from lxml import etree
 import argparse
 import filesystem
 import os
+import pom
 import re
 import shutil
+import threading
 import zipfile
 
-class FileNotFoundError(IOError):
+class FileNotFoundError(Exception):
     def __init__(self, filename):
         self.filename = filename
 
@@ -24,7 +26,7 @@ def getFile(filename):
     """
     try:
         f = open(filename)
-    except IOError as e:
+    except IOError:
         raise FileNotFoundError(filename)
     contents = ""
     for line in f.readlines():
@@ -38,7 +40,7 @@ def extractElement(parent, tag):
     return None
 
 def removeNamespace(s):
-    return re.sub("""\{[^}]*\}""", "", s)
+    return re.sub("""{[^}]*}""", "", s)
 
 def extractProperties(project):
     """ Extract dict of maven properties.
@@ -66,6 +68,19 @@ def replaceWithProperties(text, properties):
             return re.sub(p, properties[name], text)
     return text
 
+def fetchDependencies(pomPath):
+    dependencyList = pom.DependencyList(pomPath)
+    sourceFetch = pom.SourceFetch(pomPath)
+    fetchers = [dependencyList, sourceFetch]
+    running = []
+    for each in fetchers:
+        thread = threading.Thread(target=each.run)
+        running.append(thread)
+        thread.start()
+    for each in running:
+        each.join()
+    return dependencyList.getList()
+
 def extractDependencies(pomXml):
     """ Extract dependency info.
 
@@ -79,7 +94,7 @@ def extractDependencies(pomXml):
         return []
     try:
         project = etree.fromstring(pomXml)
-    except etree.XMLSyntaxError as e:
+    except etree.XMLSyntaxError:
         return []
     if project == None:
         return []
@@ -103,40 +118,43 @@ def extractDependencies(pomXml):
         dependencyList.append(":".join([groupId, artifactId, version]))
     return dependencyList
 
+def fullJarDirectoryPath(repository, dependency):
+    """ Return full path to the dependency directory.
+
+    Parameters:
+    repository      Path to the maven repository directory under .m2
+                    directory. Must exist.
+    dependency      Maven dependency in the form group:artifact:version.
+
+    """
+    fullJarPath = repository
+    count = 0
+    for token in dependency.split(":"):
+        if count < 2:
+            fullJarPath = os.path.join(
+                fullJarPath, 
+                *token.split("."))
+        # Don't split the last token, it's the version
+        else:
+            fullJarPath = os.path.join(
+                fullJarPath, 
+                token)
+        count += 1
+    return fullJarPath
+
+def sourceJarFilename(dependency):
+    """ Return the source jar's filename.
+
+    Parameters:
+    dependency      Maven dependency in the form group:artifact:version.
+
+    """
+    pieces = dependency.split(":")
+    return "-".join([pieces[1], pieces[2], "sources.jar"])
+
 class JarDependencies(object):
-    def fullJarDirectoryPath(self, repository, dependency):
-        """ Return full path to the dependency directory.
-
-        Parameters:
-        repository      Path to the maven repository directory under .m2
-                        directory. Must exist.
-        dependency      Maven dependency in the form group:artifact:version.
-
-        """
-        fullJarPath = repository
-        count = 0
-        for token in dependency.split(":"):
-            if count < 2:
-                fullJarPath = os.path.join(
-                    fullJarPath, 
-                    *token.split("."))
-            # Don't split the last token, it's the version
-            else:
-                fullJarPath = os.path.join(
-                    fullJarPath, 
-                    token)
-            count += 1
-        return fullJarPath
-
-    def sourceJarFilename(self, dependency):
-        """ Return the source jar's filename.
-
-        Parameters:
-        dependency      Maven dependency in the form group:artifact:version.
-
-        """
-        pieces = dependency.split(":")
-        return "-".join([pieces[1], pieces[2], "sources.jar"])
+    def __init__(self):
+        self._filesystem = None
 
     def deriveSourcePaths(self, dependencies, m2directory):
         """ Find dependencies' source code jars.
@@ -158,8 +176,8 @@ class JarDependencies(object):
 
         jarPaths = []
         for each in dependencies:
-            dependencyDirectory = self.fullJarDirectoryPath(repository, each)
-            filename = self.sourceJarFilename(each)
+            dependencyDirectory = fullJarDirectoryPath(repository, each)
+            filename = sourceJarFilename(each)
             fullFilePath = os.path.join(dependencyDirectory, filename)
             if self._filesystem.exists(fullFilePath):
                 jarPaths.append(fullFilePath)
@@ -202,15 +220,15 @@ def extractSources(directory, filenames):
         checkZipForIllegalMembers(zipf, fname)
         zipf.extractall(directory)
 
-def main(pom, config):
+def main(pomPath, config):
     """ Copy and extract pom dependency sources.
 
     Parameters:
-    pom      absolute path to the pom.xml file.
+    pomPath  absolute path to the pom.xml file.
     config   dictionary of configuration options.
 
     """
-    dependencies = extractDependencies(getFile(pom))
+    dependencies = fetchDependencies(pomPath)
     jarDeps = JarDependencies()
     jarDeps.setFilesystem(filesystem.Real())
     if config.has_key("m2path"):
