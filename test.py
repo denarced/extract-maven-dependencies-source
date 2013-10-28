@@ -7,13 +7,25 @@ import pom
 import tempfile
 import unittest
 
+
 def surroundWithPomXmlDeclarationAndProject(xml):
-    return """<?xml version="1.0"?>
-        <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-        """ + xml + """
+    ns = "http://maven.apache.org/POM/4.0.0"
+    xsi = "http://www.w3.org/2001/XMLSchema-instance"
+    location = ("http://maven.apache.org/POM/4.0.0 "
+                "http://maven.apache.org/xsd/maven-4.0.0.xsd")
+    strFormat = """<?xml version="1.0"?>
+        <project xmlns="{ns}" xmlns:xsi="{xsi}" xsi:schemaLocation="{loc}">
+        """
+    declaration = strFormat.format(
+        ns=ns,
+        xsi=xsi,
+        loc=location)
+    return declaration + xml + """
         </project>"""
 
+
 class GetFileReadTest(unittest.TestCase):
+    """ Test ctagmvn.getFile. """
     def setUp(self):
         self.tempFile = tempfile.NamedTemporaryFile()
         self.fileContent = "something is written here"
@@ -26,14 +38,16 @@ class GetFileReadTest(unittest.TestCase):
     def testFileContentReading(self):
         content = ctagmvn.getFile(self.tempFile.name)
         self.assertEqual(
-            self.fileContent, # expected
-            content) # actual
+            self.fileContent,  # expected
+            content)  # actual
+
 
 class GetFileExistenceTest(unittest.TestCase):
     def testExceptionIsRaisedForNonExistentFile(self):
         filepath = "/tmp/thiscannotexistsorthistestismeaningless"
         assert not os.path.exists(filepath)
         self.assertRaises(ctagmvn.FileNotFoundError, ctagmvn.getFile, filepath)
+
 
 class JarDependenciesTest(unittest.TestCase):
     def setUp(self):
@@ -44,17 +58,20 @@ class JarDependenciesTest(unittest.TestCase):
     def testExceptionOnNonExistentM2(self):
         self.assertRaises(
             ctagmvn.FileNotFoundError,
-            self.jarDependencies.deriveSourcePaths, 
+            self.jarDependencies.deriveSourcePaths,
             ["org.springframework:spring-core:3.1.4.RELEASE"],
             None)
 
     def testHappyPath(self):
-        expected = ["/home/denarced/.m2/repository/org/springframework/spring-core/3.1.4.RELEASE/spring-core-3.1.4.RELEASE-sources.jar"]
+        expected = [(
+            "/home/denarced/.m2/repository/org/springframework/"
+            "spring-core/3.1.4.RELEASE/spring-core-3.1.4.RELEASE-sources.jar")]
         dependencies = ["org.springframework:spring-core:3.1.4.RELEASE"]
         self.filesystem.allPathsExist(True)
         self.assertEqual(
-            expected, 
+            expected,
             self.jarDependencies.deriveSourcePaths(dependencies, None))
+
 
 class DependencyListTest(unittest.TestCase):
     def testHappyPath(self):
@@ -79,4 +96,4 @@ class DependencyListTest(unittest.TestCase):
         self.assertTrue(len(depList.getList()) > 0)
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest.main(verbosity=2)
